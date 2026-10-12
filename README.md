@@ -1,173 +1,42 @@
-# Digital Watermarking System (DWS) with XAI for Watermark Prediction
+# watermark-attack-benchmark
 
-## Overview
-The **Digital Watermarking System (DWS)** is a comprehensive framework for embedding, attacking, and evaluating watermarks in digital images. It supports multiple watermarking techniques, simulates real-world image attacks, and provides robust evaluation metrics. Additionally, this project incorporates **Explainable AI (XAI)** techniques for predicting watermark robustness and analyzing how attacks affect watermark integrity.
+Embeds a watermark into image patches with five transform-domain methods (DCT, DWT, SVD, DWT+DCT, DWT+SVD), runs six common attacks on the results, and measures what survives.
 
-This project is designed for **research, benchmarking, and educational purposes** in image security and digital watermarking.
+Built with: Python, OpenCV, NumPy, PyWavelets, scikit-image, scikit-learn, SHAP · Context: VIT Digital Watermarking and Steganography course project, 2025
 
----
+![Original patch and the same patch watermarked with each method](Figure_1.png)
 
-## Features
-- **Image Preprocessing:** Extracts patches from raw images and organizes them into `train` and `val` sets.
-- **Watermark Embedding:** Implements watermarking algorithms including:
-  - DCT (Discrete Cosine Transform)
-  - DWT (Discrete Wavelet Transform)
-  - SVD (Singular Value Decomposition)
-  - Hybrid methods: DWT+DCT, DWT+SVD
-- **Attack Simulation:** Applies common distortions to watermarked images:
-  - Blur, Crop, JPEG Compression (50%, 70%), Noise, Rotation
-- **Metrics & Evaluation:**
-  - PSNR (Peak Signal-to-Noise Ratio)
-  - SSIM (Structural Similarity Index)
-  - BER (Bit Error Rate) for watermarks
-- **Explainable AI for Watermark Prediction:** 
-  - Predicts watermark resilience using interpretable ML models
-  - Provides visual insights into which parts of images affect watermark survival
-- **Visualization & Reporting:** Generates plots, heatmaps, and summary tables for benchmarking results.
+## Pipeline
 
----
+1. `code/preprocess.py` cuts source images into 256×256 patches and splits them 80/20 into train/val.
+2. `code/watermark/{dct,dwt,svd,dwt_dct,dwt_svd}.py` embed `watermark.png` (64×64, alpha 0.5) into the luminance channel.
+3. `code/attacks_with_metrics.py` applies JPEG (quality 50 and 70), Gaussian noise, Gaussian blur, an 80% centre crop resized back, and a 15° rotation.
+4. `code/metrics_with_ber.py` computes PSNR, SSIM and BER for every attacked image.
+5. `code/plot_attack_metrics.py` writes the boxplots and heatmaps in `results/`.
+6. `code/xai_pipeline.py` extracts simple image features (intensity, entropy, edge density, texture), trains a random forest to predict BER, and explains it with SHAP.
 
-## Dataset Structure
+## Results
 
-The dataset is organized to facilitate **watermark embedding, attack simulations, and metric computation**. Folder structure:
+Mean over 2,500 patches per cell, as PSNR (dB) / SSIM. Both compare each watermarked image to its attacked version, so they show how much each attack distorts the image (higher means a milder attack), not how visible the watermark is.
 
-```
-dataset/
-├── original/
-│   ├── train/            # Original image patches for training
-│   └── val/              # Original image patches for validation
-├── watermarked/
-│   ├── DCT/               # Watermarked images using DCT
-│   │   ├── train/
-│   │   └── val/
-│   ├── DWT/               # Watermarked images using DWT
-│   │   ├── train/
-│   │   └── val/
-│   ├── DWT_DCT/           # Watermarked images using DWT+DCT
-│   │   ├── train/
-│   │   └── val/
-│   ├── DWT_SVD/           # Watermarked images using DWT+SVD
-│   │   ├── train/
-│   │   └── val/
-│   └── SVD/               # Watermarked images using SVD
-│       ├── train/
-│       └── val/
-├── attacks/               # Attacked watermarked images
-│   ├── DCT/               # Each watermark type has attack subfolders
-│   │   ├── Blur/train/
-│   │   ├── Blur/val/
-│   │   ├── Crop/train/
-│   │   └── ... etc.
-│   ├── DWT/
-│   └── ... (other watermark types)
-├── attack_metrics.csv      # Metrics for attacked images
-└── metrics_with_ber.csv    # Watermark BER metrics
-```
+| Method | Blur | Crop | JPEG50 | JPEG70 | Noise | Rotate |
+|---|---|---|---|---|---|---|
+| DCT | 30.36 / 0.888 | 16.73 / 0.366 | 32.92 / 0.938 | 34.85 / 0.959 | 23.39 / 0.622 | 16.16 / 0.339 |
+| DWT | 33.51 / 0.899 | 18.45 / 0.425 | 33.81 / 0.943 | 35.51 / 0.961 | 23.55 / 0.616 | 17.90 / 0.400 |
+| SVD | 24.48 / 0.747 | 14.88 / 0.275 | 28.39 / 0.891 | 30.41 / 0.929 | 23.99 / 0.770 | 14.53 / 0.264 |
+| DWT+DCT | 29.71 / 0.884 | 16.87 / 0.377 | 32.61 / 0.935 | 34.39 / 0.955 | 23.38 / 0.616 | 16.28 / 0.350 |
+| DWT+SVD | 29.44 / 0.832 | 16.71 / 0.278 | 31.84 / 0.915 | 33.51 / 0.941 | 23.40 / 0.665 | 16.24 / 0.265 |
 
-**Notes:**
-- Each watermark type (`DCT`, `DWT`, etc.) has the same **train/val split**.
-- Under `attacks/`, images are grouped by **attack type** (Blur, Crop, JPEG50, JPEG70, Noise, Rotate), with corresponding `train` and `val` folders.
-- Folder structure is preserved on GitHub using `.gitkeep` files.
+Source: `results/attack_summary.csv`. Boxplots and heatmaps are in `results/`.
 
----
+**Known issue:** the extractors in `code/metrics_with_ber.py` compare against a 32×32 watermark, but embedding uses 64×64. Because of that mismatch, the BER values in `dataset/metrics_with_ber.csv` sit around 0.5 (chance level) and don't say anything about robustness yet. The random forest and SHAP step is trained on those BER values, so it has the same problem.
 
-## Getting Started
+## How to run
 
-### 1. Preprocess Images
-```bash
-python code/preprocess.py
-```
-* Converts raw images into patch-based datasets.
-* Creates `train/` and `val/` splits for each watermarking experiment.
-
-### 2. Embed Watermarks
-```bash
-# Example: Embed DCT watermark
-python code/watermark/dct.py
-```
-* Supports DCT, DWT, SVD, DWT+DCT, and DWT+SVD embedding.
-* Generates watermarked images in corresponding `dataset/watermarked/<method>/` folders.
-
-### 3. Apply Attacks
-```bash
-python code/attacks_with_metrics.py
-```
-* Applies all attack types on watermarked images.
-* Saves attacked images in `dataset/attacks/<method>/<attack_type>/`.
-
-### 4. Compute Metrics
-```bash
-python code/metrics_with_ber.py
-```
-* Computes PSNR, SSIM, and Bit Error Rate (BER) for attacked watermarked images.
-* Outputs `attack_metrics.csv` and `metrics_with_ber.csv`.
-
-### 5. Visualize Results
-```bash
-python code/plot_attack_metrics.py
-```
-* Generates plots, boxplots, and heatmaps summarizing metrics for benchmarking.
-* Saves outputs to `results/` folder.
-
----
-
-## Explainable AI for Watermark Prediction
-
-* Uses ML models to **predict watermark survival** under attacks.
-* Provides **visual interpretations** showing which regions in an image are most sensitive.
-* Helps researchers understand the **robustness of each watermarking method**.
-
----
-
-## Requirements
-
-* Python 3.7+
-* Libraries:
-  * `opencv-python`
-  * `numpy`
-  * `scikit-image`
-  * `pandas`
-  * `matplotlib`
-  * `seaborn`
-  * `tqdm`
-
-Install dependencies:
-```bash
-pip install -r requirements.txt
-```
-
----
-
-## Example Workflow
+The image dataset isn't in the repo. Put source images in `raw_images/` and install the dependencies:
 
 ```bash
-# Preprocess images
-python code/preprocess.py
-
-# Embed watermark (DWT example)
-python code/watermark/dwt.py
-
-# Apply attacks and compute metrics
-python code/attacks_with_metrics.py
-
-# Compute BER for watermarks
-python code/metrics_with_ber.py
-
-# Generate visualization
-python code/plot_attack_metrics.py
+pip install opencv-python numpy pandas PyWavelets scikit-image scikit-learn shap matplotlib seaborn tqdm joblib
 ```
 
----
-
-## Directory Structure
-
-```
-project/
-├── code/                    # All scripts for watermarking, attacks, metrics, plotting
-├── dataset/                 # Original, watermarked, attacked images
-├── results/                 # Visualizations and summary tables
-├── raw_images/              # Source images
-├── watermark.png            # Watermark image
-├── architecture_diagram.pdf # High-level system overview
-└── README.md                # (You are here)
-```
+Then run the steps above in order. The scripts use relative paths, so run each one from its own folder (`code/` or `code/watermark/`).
